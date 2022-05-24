@@ -1,5 +1,9 @@
+import datetime
+
 from pydantic import BaseModel
 from typing import Union
+
+from app import models
 
 
 class ProductBase(BaseModel):
@@ -28,8 +32,27 @@ class Offer(BaseModel):
         orm_mode = True
 
 
-Product.update_forward_refs()
-
-
 class ProductUpdate(ProductBase):
     pass
+
+
+class OfferList(BaseModel):
+    offers: list[Offer]
+
+    class Config:
+        orm_mode = True
+
+
+class PriceSnapshot(BaseModel):
+    price: float
+    time: datetime.datetime
+
+
+class PriceHistory(BaseModel):
+    history: list[PriceSnapshot]
+
+    class Config:
+        orm_mode = True
+
+
+Product.update_forward_refs()

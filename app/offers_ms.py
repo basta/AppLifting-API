@@ -2,7 +2,7 @@ from typing import Optional, Any
 
 import requests
 
-import models
+import app.models as models
 
 
 class APIError(Exception):
@@ -10,6 +10,10 @@ class APIError(Exception):
 
 
 class OffersAPI:
+    """
+    Offers MS communication object.
+    """
+
     def __init__(self, base_url: str):
         self.base_url = base_url
         self._token: Optional[str] = None
@@ -24,6 +28,12 @@ class OffersAPI:
             )
 
     def refresh_token(self):
+        """
+        Refresh and load token of this offerAPI object.
+
+        :return: True on success, False on fail
+        :raises requests.exceptions.ConnectionError: If
+        """
         data = self.send_request("POST", "/auth", use_token=False)
         self._token = data["access_token"]
 
@@ -35,10 +45,11 @@ class OffersAPI:
 
         Can raise errors on unsuccessful API calls
 
+        :param method: HTTP verb to use with request
         :param endpoint: API endpoint (e.g. /auth) must start with a leading "/"
         :param data: Data to send in request body, json format
         :param use_token: Enable adding access token to the request
-        :raises APIError:
+        :raises APIError: On unsuccessful
         :raises ValueError: If using token before setting it using refresh_token
         :return: Response from API
         """

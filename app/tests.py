@@ -1,15 +1,15 @@
-import pytest
+import datetime
+import time
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import models
-from database import BaseDbModel
-from main import app, get_db
-
-import crud
-import schemas
-from offers_ms import OffersAPI, APIError
+import app.schemas as schemas
+import app.crud as crud
+from app.database import BaseDbModel
+from app.main import get_db, app
+from app.offers_ms import OffersAPI
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
@@ -124,6 +124,8 @@ def test_update_offers_for_product():
 
 
 # Integration tests for the Offers microservice
+
+
 def test_register_product():
     db_product = crud.create_product(
         TestingSessionLocal(), schemas.ProductCreate(name="Sekačka", desc="nejlepší")
@@ -154,3 +156,65 @@ def test_update_product_offers():
     # Update after registering
     offersAPI.register_product(db_product)
     db_product.update_offers(db, offersAPI.get_offers_for_product(db_product))
+
+
+def test_creating_product_snapshot():
+    db = TestingSessionLocal()
+    db_product = crud.create_product(
+        db, schemas.ProductCreate(name="Sekačka", desc="nejlepší")
+    )
+    offersAPI.register_product(db_product)
+    offers = offersAPI.get_offers_for_product(db_product)
+    db_product.add_snapshot_average_price(db, offers)
+    db.refresh(db_product)
+    snapshot = db_product.price_snapshots[0]
+    assert isinstance(snapshot.price, float)
+
+
+def test_price_interpolation():
+    db = TestingSessionLocal()
+    db_product = crud.create_product(
+        db, schemas.ProductCreate(name="Sekačka", desc="nejlepší")
+    )
+    db_product.add_snapshot(db, 100, datetime.datetime.now())
+    db_product.add_snapshot(
+        db, 200, datetime.datetime.now() + datetime.timedelta(seconds=60)
+    )
+    db.refresh(db_product)
+    assert (
+        db_product.interpolate_price_at_time(
+            db, datetime.datetime.now() - datetime.timedelta(minutes=1)
+        ).price
+        == 100
+    )
+
+    assert (
+        db_product.interpolate_price_at_time(
+            db, datetime.datetime.now() + datetime.timedelta(minutes=1)
+        ).price
+        == 200
+    )
+
+
+def test_price_change():
+    db = TestingSessionLocal()
+    db_product = crud.create_product(
+        db, schemas.ProductCreate(name="Sekačka", desc="nejlepší")
+    )
+    db_product.add_snapshot(db, 100, datetime.datetime.now())
+    db_product.add_snapshot(db, 231, datetime.datetime.now())
+    db_product.add_snapshot(db, 242, datetime.datetime.now())
+    db_product.add_snapshot(
+        db, 200, datetime.datetime.now() + datetime.timedelta(minutes=1)
+    )
+    db_product.add_snapshot(
+        db, 200, datetime.datetime.now() + datetime.timedelta(minutes=2)
+    )
+    change = crud.get_product_price_change(
+        db,
+        db_product.id,
+        from_time=datetime.datetime.now() - datetime.timedelta(minutes=1),
+        to_time=datetime.datetime.now() + datetime.timedelta(minutes=1),
+    )
+
+    assert change == 2.0
